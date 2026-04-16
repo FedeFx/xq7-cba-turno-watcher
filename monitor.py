@@ -5,8 +5,6 @@ Navega la web, detecta disponibilidad de turnos y notifica al instante.
 """
 import asyncio
 import logging
-import sys
-import time
 from datetime import datetime
 
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -44,7 +42,7 @@ async def check_appointments() -> dict:
 
         try:
             logger.info("Navegando a %s", config.CONSULATE_URL)
-            await page.goto(config.CONSULATE_URL, wait_until="networkidle", timeout=config.NAVIGATION_TIMEOUT)
+            await page.goto(config.CONSULATE_URL, wait_until="load", timeout=config.NAVIGATION_TIMEOUT)
 
             logger.info("Esperando botón 'Continue / Continuar'...")
             continue_btn = page.get_by_role("link", name=config.CONTINUE_BUTTON_TEXT)
@@ -57,9 +55,20 @@ async def check_appointments() -> dict:
             await continue_btn.click()
             logger.info("Click en 'Continue / Continuar' realizado")
 
-            logger.info("Esperando resultado...")
-            await page.wait_for_load_state("networkidle", timeout=config.RESULT_TIMEOUT)
-            await page.wait_for_timeout(3000)
+            logger.info("Esperando resultado del widget...")
+            await page.wait_for_load_state("load", timeout=config.RESULT_TIMEOUT)
+            # El widget a veces tiene el texto en nodos no visibles; innerText del body es más fiable.
+            await page.wait_for_function(
+                """() => {
+                    const t = document.body?.innerText || '';
+                    return t.includes('No hay horas disponibles')
+                        || t.includes('bookitit')
+                        || t.includes('502')
+                        || t.includes('Bad Gateway');
+                }""",
+                timeout=config.RESULT_TIMEOUT,
+            )
+            await page.wait_for_timeout(2000)
 
             screenshot = await page.screenshot(full_page=True)
             page_text = await page.inner_text("body")
@@ -105,7 +114,7 @@ async def run_with_retries() -> dict:
         if attempt < config.MAX_RETRIES:
             delay = config.RETRY_DELAYS[attempt - 1]
             logger.info("Reintentando en %d segundos...", delay)
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
     return result
 

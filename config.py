@@ -12,9 +12,10 @@ PAGE_TITLE_TEXT = "Consulado General de España en Córdoba"
 CONTINUE_BUTTON_TEXT = "Continue"
 
 # --- Timeouts (milisegundos) ---
-NAVIGATION_TIMEOUT = 30_000
-BUTTON_TIMEOUT = 15_000
-RESULT_TIMEOUT = 15_000
+NAVIGATION_TIMEOUT = 45_000
+BUTTON_TIMEOUT = 20_000
+# Tras "Continuar" el widget puede tardar; no usar networkidle (muchas páginas nunca quedan "idle")
+RESULT_TIMEOUT = 60_000
 
 # --- Reintentos ---
 MAX_RETRIES = 3
