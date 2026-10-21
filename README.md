@@ -76,14 +76,41 @@ Cuando pasa, el monitor deja de correr sin avisar. Para reactivarlo:
 └── README.md
 ```
 
-## Ejecución local (opcional)
+## Ejecución en tu PC (IP residencial)
+
+Desde GitHub Actions, Cloudflare muestra un desafío anti-bots (estado `blocked`). Desde una conexión
+hogareña normalmente no pasa. Para correrlo en tu PC:
 
 ```bash
+git clone https://github.com/fedefx/xq7-cba-turno-watcher.git
+cd xq7-cba-turno-watcher
+python -m venv .venv
+# Windows: .venv\Scripts\activate      Linux/Mac: source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium
-DRY_RUN=1 DEBUG=1 python monitor.py   # prueba sin notificar
-NTFY_TOPIC=tu-topic python monitor.py
+cp .env.example .env                    # Windows: copy .env.example .env  → completá NTFY_TOPIC
 ```
+
+Prueba (sin notificar, con ventana para ver qué pasa):
+
+```bash
+DRY_RUN=1 DEBUG=1 HEADLESS=0 python monitor.py      # Windows (PowerShell): $env:DRY_RUN=1; $env:DEBUG=1; $env:HEADLESS=0; python monitor.py
+```
+
+Si termina en `unavailable`, funciona. Para dejarlo corriendo cada 15 minutos:
+
+- **Linux/Mac** (`crontab -e`):
+  `*/15 * * * * cd /ruta/al/repo && .venv/bin/python monitor.py >> monitor.log 2>&1`
+- **Windows** (Programador de tareas → Crear tarea básica → Diariamente → repetir cada 15 min):
+  programa `C:\ruta\al\repo\.venv\Scripts\python.exe`, argumentos `monitor.py`,
+  "Iniciar en" `C:\ruta\al\repo`.
+
+## Prueba con Cloudflare WARP en Actions
+
+En Actions → Monitor Citas Consulado → Run workflow, marcá `warp` y `dry_run`. El log del paso
+"Connect Cloudflare WARP" muestra la IP antes y después; el resultado del monitor dice si sigue `blocked`.
+Si funciona, creá la variable de repo `USE_WARP=true` (Settings → Secrets and variables → Actions →
+Variables) para que los runs programados también usen WARP.
 
 ## FAQ
 

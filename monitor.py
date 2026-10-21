@@ -129,7 +129,7 @@ async def check_appointments() -> dict:
         browser = None
         page = None
         try:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(headless=config.HEADLESS)
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 720},
                 locale="es-ES",

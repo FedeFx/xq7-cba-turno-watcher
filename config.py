@@ -1,5 +1,16 @@
 import os
 
+# Carga opcional de un archivo .env (para correr en tu PC sin exportar variables a mano).
+# Las variables ya definidas en el entorno tienen prioridad.
+_ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if os.path.exists(_ENV_FILE):
+    with open(_ENV_FILE, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
 # --- URL del Consulado ---
 CONSULATE_URL = (
     "https://www.citaconsular.es/es/hosteds/widgetdefault/"
@@ -51,6 +62,8 @@ HTML_FILE = "page.html"
 # --- Modos ---
 DEBUG = os.environ.get("DEBUG", "") not in ("", "0", "false")
 DRY_RUN = os.environ.get("DRY_RUN", "") not in ("", "0", "false")
+# HEADLESS=0 abre Chromium con ventana (en tu PC, o con xvfb en Linux sin pantalla)
+HEADLESS = os.environ.get("HEADLESS", "1") not in ("0", "false")
 
 # --- Notificaciones: ntfy.sh ---
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")

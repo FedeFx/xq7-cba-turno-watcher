@@ -14,6 +14,10 @@ on:
         description: 'No enviar notificaciones (solo loguearlas)'
         type: boolean
         default: false
+      warp:
+        description: 'Salir a internet por Cloudflare WARP (prueba contra el bloqueo)'
+        type: boolean
+        default: false
 
 concurrency:
   group: monitor-${{ github.ref }}
@@ -60,6 +64,28 @@ jobs:
           key: monitor-state-${{ github.run_id }}
           restore-keys: monitor-state-
 
+      # Opcional: sale por Cloudflare WARP en vez de la IP de Azure, para ver si evita el desafío anti-bots.
+      # Se activa con el input "warp" (manual) o con la variable de repo USE_WARP=true (runs programados).
+      - name: Connect Cloudflare WARP
+        if: inputs.warp || vars.USE_WARP == 'true'
+        continue-on-error: true
+        run: |
+          echo "IP antes: $(curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp)=' | tr '\n' ' ')"
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+            | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update -q && sudo apt-get install -y -q cloudflare-warp
+          sudo systemctl start warp-svc || true
+          for i in $(seq 1 15); do warp-cli --accept-tos status >/dev/null 2>&1 && break; sleep 2; done
+          warp-cli --accept-tos registration new
+          warp-cli --accept-tos connect
+          for i in $(seq 1 15); do
+            curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -q '^warp=on' && break; sleep 2
+          done
+          warp-cli --accept-tos status
+          echo "IP después: $(curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp)=' | tr '\n' ' ')"
+
       - name: Run monitor
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
@@ -69,6 +95,11 @@ jobs:
           DEBUG: ${{ inputs.debug && '1' || '' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
         run: python monitor.py
+
+      - name: Disconnect Cloudflare WARP
+        if: always() && (inputs.warp || vars.USE_WARP == 'true')
+        continue-on-error: true
+        run: warp-cli --accept-tos disconnect || true
 
       - name: Save monitor state
         if: always() && hashFiles('state.json') != ''
