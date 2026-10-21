@@ -20,6 +20,15 @@ SERVER_ERROR_TEXTS = [
     "Gateway Time-out",
 ]
 
+# Página de verificación anti-bots (Cloudflare Turnstile): no es disponibilidad, se trata como bloqueo
+BLOCKED_TEXTS = [
+    "Verificación de seguridad en curso",
+    "verifica que tú no eres un bot",
+    "Just a moment",
+    "Verify you are human",
+    "challenges.cloudflare.com",
+]
+
 # --- Timeouts (milisegundos) ---
 NAVIGATION_TIMEOUT = 45_000
 BUTTON_TIMEOUT = 20_000

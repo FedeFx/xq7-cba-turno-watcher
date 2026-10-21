@@ -83,10 +83,16 @@ async def find_continue(page):
 
 
 def classify(texts: list) -> str:
-    """unavailable si aparece el texto de 'sin horas'; error si hay error claro; si no, unknown."""
+    """
+    unavailable si aparece el texto de 'sin horas'; blocked si es la verificación anti-bots;
+    error si hay error claro; si no, unknown.
+    """
     full = "\n".join(t for _, t in texts)
     if config.NO_APPOINTMENTS_TEXT in full:
         return "unavailable"
+    # El nombre del frame incluye su URL (sirve para detectar el iframe de Cloudflare)
+    if any(b in name or b in text for name, text in texts for b in config.BLOCKED_TEXTS):
+        return "blocked"
     if not full.strip() or any(e in full for e in config.SERVER_ERROR_TEXTS):
         return "error"
     return "unknown"
@@ -115,7 +121,7 @@ async def check_appointments() -> dict:
     y devuelve el estado de la página.
 
     Returns:
-        dict con keys: status ("available"|"unknown"|"unavailable"|"error"),
+        dict con keys: status ("unknown"|"unavailable"|"blocked"|"error"),
                        text (contenido de la página),
                        screenshot (bytes PNG o None)
     """
@@ -166,6 +172,8 @@ async def check_appointments() -> dict:
 
             if status == "unavailable":
                 logger.info("Estado: SIN turnos disponibles (texto encontrado en: %s)", ", ".join(where))
+            elif status == "blocked":
+                logger.warning("BLOQUEADO: la web muestra la verificación anti-bots de Cloudflare")
             elif status == "error":
                 logger.warning("Página vacía o con error del servidor")
             else:
@@ -194,7 +202,7 @@ async def run_with_retries() -> dict:
         logger.info("--- Intento %d de %d ---", attempt, config.MAX_RETRIES)
         result = await check_appointments()
 
-        if result["status"] != "error":
+        if result["status"] not in ("error", "blocked"):
             return result
 
         if attempt < config.MAX_RETRIES:
@@ -234,12 +242,15 @@ async def main() -> int:
     status = result["status"]
     logger.info("ESTADO FINAL: %s", status)
 
-    if status == "error":
+    if status in ("error", "blocked"):
         errors = prev_errors + 1
         logger.error("El monitor falló después de %d intentos (%d runs fallidos seguidos)",
                      config.MAX_RETRIES, errors)
         if errors == config.ERROR_ALERT_THRESHOLD:
-            notifier.notify_error(result["text"], errors)
+            msg = result["text"]
+            if status == "blocked":
+                msg = "La web bloquea al monitor con una verificación anti-bots (Cloudflare).\n\n" + msg
+            notifier.notify_error(msg, errors)
         else:
             logger.info("Aviso de error omitido (umbral: %d runs seguidos)", config.ERROR_ALERT_THRESHOLD)
         save_state({"consecutive_errors": errors})

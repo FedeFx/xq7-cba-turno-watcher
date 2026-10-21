@@ -43,7 +43,7 @@ jobs:
 
       # La caché queda atada a la versión exacta de Playwright: si cambia, se baja el Chromium nuevo.
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
@@ -54,7 +54,7 @@ jobs:
 
       # Estado entre runs (contador de errores seguidos) para no spamear avisos de error.
       - name: Restore monitor state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: state.json
           key: monitor-state-${{ github.run_id }}
@@ -72,14 +72,14 @@ jobs:
 
       - name: Save monitor state
         if: always() && hashFiles('state.json') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: state.json
           key: monitor-state-${{ github.run_id }}
 
       - name: Upload diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: diagnostico-${{ github.run_id }}
           path: |

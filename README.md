@@ -59,6 +59,7 @@ Cuando pasa, el monitor deja de correr sin avisar. Para reactivarlo:
 - **Disponibilidad de turnos**: cuando el mensaje "No hay horas disponibles" desaparece
 - **Cambios en la página**: cualquier contenido nuevo (calendarios, selectores de fecha, etc.)
 - **Página desconocida**: si no aparece "No hay horas disponibles" ni un error claro, se avisa como posible disponibilidad (nunca se toma como error)
+- **Bloqueo anti-bots**: si la web muestra la verificación de Cloudflare ("Verificación de seguridad en curso"), el estado es `blocked` y se trata como error (no como disponibilidad). Ver FAQ.
 - **Errores del servidor**: 502/503/504 o página vacía, con reintentos automáticos (3 intentos)
 - **Anti-spam**: el aviso de error se manda solo tras 3 runs fallidos seguidos (una vez), y llega un aviso cuando se recupera. El run queda en rojo (exit 1) cuando falla.
 
@@ -97,3 +98,6 @@ El script reintenta automáticamente hasta 3 veces con espera progresiva (5s, 15
 
 **¿Me avisa aunque tenga el celular en silencio?**
 Sí. Las notificaciones de ntfy con prioridad "urgent" ignoran el modo silencio/no molestar.
+
+**El log dice `ESTADO FINAL: blocked`. ¿Qué pasa?**
+citaconsular.es está detrás de Cloudflare Turnstile y, desde las IPs de GitHub Actions, muestra la página "Verificación de seguridad en curso" en vez del widget. Mientras eso pase el monitor no puede ver los turnos. Alternativas: correrlo desde una IP residencial (self-hosted runner en una PC/Raspberry en casa, `runs-on: self-hosted`) o en un navegador no headless con perfil real. Este proyecto no intenta saltear captchas.
