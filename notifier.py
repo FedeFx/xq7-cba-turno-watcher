@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 def send_ntfy(title: str, message: str, priority: str = "urgent", tags: str = "rotating_light") -> bool:
+    if config.DRY_RUN:
+        logger.info("[DRY_RUN] ntfy NO enviado. Título: %s | Mensaje: %s", title, message[:300])
+        return False
     if not config.NTFY_URL:
         logger.warning("NTFY_TOPIC no configurado, saltando notificación ntfy")
         return False
@@ -39,6 +42,9 @@ def send_ntfy(title: str, message: str, priority: str = "urgent", tags: str = "r
 
 
 def send_email(subject: str, body: str, screenshot: bytes | None = None) -> bool:
+    if config.DRY_RUN:
+        logger.info("[DRY_RUN] Email NO enviado. Asunto: %s", subject)
+        return False
     if not config.EMAIL_SENDER or not config.EMAIL_PASSWORD:
         logger.warning("Credenciales de email no configuradas, saltando email")
         return False
@@ -68,12 +74,14 @@ def send_email(subject: str, body: str, screenshot: bytes | None = None) -> bool
         return False
 
 
-def notify_available(page_text: str, screenshot: bytes | None = None) -> None:
+def notify_available(page_text: str, screenshot: bytes | None = None, unknown: bool = False) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    title = "CITA CONSULADO DISPONIBLE"
+    title = "CITA CONSULADO DISPONIBLE" if not unknown else "CAMBIO EN PAGINA DEL CONSULADO"
+    extra = "" if not unknown else "La página no coincide con ningún estado conocido (puede ser turnos o un cambio de diseño).\n\n"
     message = (
         f"[{now}] Se detectó un cambio en la página del consulado.\n\n"
         f"El texto 'No hay horas disponibles' YA NO APARECE.\n\n"
+        f"{extra}"
         f"Revisá ahora: {config.CONSULATE_URL}\n\n"
         f"Texto detectado:\n{page_text[:500]}"
     )
@@ -82,10 +90,22 @@ def notify_available(page_text: str, screenshot: bytes | None = None) -> None:
     send_email(f"🚨 {title}", message, screenshot)
 
 
-def notify_error(error_msg: str) -> None:
+def notify_error(error_msg: str, consecutive: int = 1) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     title = "Error Monitor Consulado"
-    message = f"[{now}] El monitor falló después de todos los reintentos.\n\nError: {error_msg}"
+    message = (
+        f"[{now}] El monitor falló {consecutive} veces seguidas (cada una con todos los reintentos).\n"
+        f"No se volverá a avisar hasta que se recupere.\n\nError: {error_msg[:1000]}"
+    )
 
     send_ntfy(title, message, priority="high", tags="warning")
+    send_email(title, message)
+
+
+def notify_recovered(previous_errors: int) -> None:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    title = "Monitor Consulado recuperado"
+    message = f"[{now}] El monitor volvió a funcionar después de {previous_errors} runs fallidos seguidos."
+
+    send_ntfy(title, message, priority="default", tags="white_check_mark")
     send_email(title, message)

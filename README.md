@@ -1,11 +1,11 @@
 # Monitor de Citas - Consulado de España en Córdoba
 
-Monitor automático que revisa cada 5 minutos la disponibilidad de turnos para ciudadanía española en el Consulado de España en Córdoba (Argentina). Cuando detecta un cambio, te avisa al celular con una alarma.
+Monitor automático que revisa periódicamente (ver [frecuencia real](#cada-cuánto-revisa)) la disponibilidad de turnos para ciudadanía española en el Consulado de España en Córdoba (Argentina). Cuando detecta un cambio, te avisa al celular con una alarma.
 
 ## Cómo funciona
 
-1. **GitHub Actions** ejecuta el script cada 5 minutos (gratis)
-2. **Playwright** abre un navegador, acepta el diálogo, clickea "Continuar" y lee el resultado
+1. **GitHub Actions** ejecuta el script periódicamente (cron `*/5`, en la práctica cada ~60-90 min; gratis)
+2. **Playwright** abre un navegador, acepta el diálogo, clickea el botón "Continue" (o "Continuar", según el idioma que sirva la web) y lee el resultado de la página y de sus iframes
 3. Si el texto "No hay horas disponibles" **desaparece**, te notifica al instante
 4. **ntfy.sh** envía una alarma urgente a tu celular (suena incluso en silencio)
 
@@ -40,13 +40,27 @@ El workflow se activa solo al hacer push. Para verificar que funciona:
 1. Andá a la pestaña **Actions** del repo
 2. Seleccioná el workflow "Monitor Citas Consulado"
 3. Click en **"Run workflow"** para ejecutarlo manualmente
-4. Verificá en los logs que dice "Sin turnos disponibles" (estado normal)
+   - `debug`: loguea el texto completo de la página, URL, título y botones visibles
+   - `dry_run`: no envía notificaciones, solo las loguea (para probar sin alertas falsas)
+4. Verificá en los logs que dice `ESTADO FINAL: unavailable` / "Sin turnos disponibles" (estado normal)
+5. En cada run se sube un artifact `diagnostico-<id>` con `screenshot.png` y `page.html`
+
+### Importante: reactivar el workflow cada 60 días
+
+GitHub **deshabilita automáticamente** los workflows programados de repos públicos tras 60 días sin actividad (commits).
+Cuando pasa, el monitor deja de correr sin avisar. Para reactivarlo:
+
+- **Actions > Monitor Citas Consulado > "Enable workflow"**, o
+- `gh workflow enable monitor.yml -R <usuario>/<repo>`, o
+- hacer cualquier commit en `main` antes de que se cumplan los 60 días.
 
 ## Qué detecta
 
 - **Disponibilidad de turnos**: cuando el mensaje "No hay horas disponibles" desaparece
 - **Cambios en la página**: cualquier contenido nuevo (calendarios, selectores de fecha, etc.)
-- **Errores del servidor**: error 502 con reintentos automáticos (3 intentos)
+- **Página desconocida**: si no aparece "No hay horas disponibles" ni un error claro, se avisa como posible disponibilidad (nunca se toma como error)
+- **Errores del servidor**: 502/503/504 o página vacía, con reintentos automáticos (3 intentos)
+- **Anti-spam**: el aviso de error se manda solo tras 3 runs fallidos seguidos (una vez), y llega un aviso cuando se recupera. El run queda en rojo (exit 1) cuando falla.
 
 ## Estructura del proyecto
 
@@ -65,7 +79,8 @@ El workflow se activa solo al hacer push. Para verificar que funciona:
 
 ```bash
 pip install -r requirements.txt
-playwright install chromium
+python -m playwright install chromium
+DRY_RUN=1 DEBUG=1 python monitor.py   # prueba sin notificar
 NTFY_TOPIC=tu-topic python monitor.py
 ```
 
@@ -75,7 +90,7 @@ NTFY_TOPIC=tu-topic python monitor.py
 Sí, 100%. GitHub Actions es gratis para repos públicos y ntfy.sh es gratuito.
 
 **¿Cada cuánto revisa?**
-Cada 5 minutos. GitHub Actions no garantiza exactitud al segundo, pero la variación es mínima.
+El cron pide cada 5 minutos, pero GitHub Actions no lo garantiza: en la práctica los runs programados salen cada ~60-90 minutos (a veces más en horas pico). Si necesitás más frecuencia, hace falta otro runner (self-hosted, un VPS, etc.).
 
 **¿Qué pasa si el servidor da error 502?**
 El script reintenta automáticamente hasta 3 veces con espera progresiva (5s, 15s, 30s).

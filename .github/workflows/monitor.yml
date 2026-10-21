@@ -2,21 +2,34 @@ name: Monitor Citas Consulado
 
 on:
   schedule:
+    # GitHub no garantiza el intervalo: en la práctica corre cada ~60-90 min.
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Loguear texto completo, URL, título y botones de la página'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'No enviar notificaciones (solo loguearlas)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: monitor-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    # La primera instalación de Chromium + apt (--with-deps) suele tardar >5 min; si no, el job se cancela solo.
-    timeout-minutes: 20
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -24,20 +37,28 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(python -c "import importlib.metadata as m;print(m.version('playwright'))")" >> "$GITHUB_OUTPUT"
+
+      # La caché queda atada a la versión exacta de Playwright: si cambia, se baja el Chromium nuevo.
       - name: Cache Playwright browsers
         uses: actions/cache@v4
-        id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
+      # Siempre se ejecuta: con cache hit solo instala deps de sistema y verifica el navegador.
       - name: Install Playwright Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: playwright install chromium --with-deps
+        run: python -m playwright install --with-deps chromium
 
-      - name: Install Playwright deps (cached)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: playwright install-deps chromium
+      # Estado entre runs (contador de errores seguidos) para no spamear avisos de error.
+      - name: Restore monitor state
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: monitor-state-${{ github.run_id }}
+          restore-keys: monitor-state-
 
       - name: Run monitor
         env:
@@ -45,4 +66,24 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+          DEBUG: ${{ inputs.debug && '1' || '' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
         run: python monitor.py
+
+      - name: Save monitor state
+        if: always() && hashFiles('state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: monitor-state-${{ github.run_id }}
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-${{ github.run_id }}
+          path: |
+            screenshot.png
+            page.html
+          if-no-files-found: ignore
+          retention-days: 7
